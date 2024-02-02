@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/go-gl/gl/v4.4-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -13,8 +15,9 @@ import (
 const (
 	width              = 500
 	height             = 500
-	rows               = 10
-	columns            = 10
+	rows               = 30
+	columns            = 30
+	fps                = 2
 	vertexShaderSource = `
     #version 430
     in vec3 vp;
@@ -34,6 +37,9 @@ const (
 
 type cell struct {
 	drawable uint32
+
+	alive     bool
+	aliveNext bool
 
 	x int
 	y int
@@ -68,8 +74,48 @@ func main() {
 	cells := makeCells()
 
 	for !window.ShouldClose() {
+		t := time.Now()
 		draw(cells, window, program)
+		getNextState(cells)
+		time.Sleep(time.Second/time.Duration(fps) - time.Since(t))
 	}
+}
+
+func getNextState(cells [][]*cell) {
+	for x := range cells {
+		for y, c := range cells[x] {
+			neighborsAlive := aliveNeighbors(cells, x, y)
+			switch {
+			case !c.alive && neighborsAlive == 3:
+				c.aliveNext = true
+			case !c.alive:
+			case c.alive && (neighborsAlive < 2 || neighborsAlive > 3):
+				c.aliveNext = false
+			default:
+				c.aliveNext = true
+			}
+		}
+	}
+	for x := range cells {
+		for _, c := range cells[x] {
+			c.alive = c.aliveNext
+		}
+	}
+}
+func aliveNeighbors(cells [][]*cell, x int, y int) int {
+	count := 0
+	for i := x - 1; i < x+2; i++ {
+		for j := y - 1; j < y+2; j++ {
+			if (i == x && j == y) || i < 0 || j < 0 || i >= columns || j >= rows {
+				continue
+			}
+			if cells[i][j].alive {
+				count++
+			}
+
+		}
+	}
+	return count
 }
 
 func initGlfw() *glfw.Window {
@@ -121,7 +167,9 @@ func draw(cells [][]*cell, window *glfw.Window, program uint32) {
 
 	for x := range cells {
 		for _, c := range cells[x] {
-			c.draw()
+			if c.alive {
+				c.draw()
+			}
 		}
 	}
 
@@ -203,10 +251,12 @@ func newCell(x, y int) *cell {
 			points[i] = (pos+size)*2 - 1
 		}
 	}
+	alive := rand.Intn(2) == 1
 	return &cell{
 		drawable: makeVao(points),
 		x:        x,
 		y:        y,
+		alive:    alive,
 	}
 }
 
